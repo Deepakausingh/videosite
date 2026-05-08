@@ -2,7 +2,7 @@ import pkg from 'pg';
 const { Pool } = pkg;
 
 // Direct PostgreSQL connection using the provided connection string
-const databaseUrl = import.meta.env.DATABASE_URL;
+const databaseUrl = import.meta.env.VITE_DATABASE_URL;
 
 export const hasDatabaseConnection = Boolean(databaseUrl);
 
