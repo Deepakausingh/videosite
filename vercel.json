@@ -5,14 +5,8 @@
   "framework": "vite",
   "outputDirectory": "dist",
   "env": {
-    "VITE_SUPABASE_URL": {
-      "description": "Your Supabase project URL"
-    },
-    "VITE_SUPABASE_ANON_KEY": {
-      "description": "Your Supabase public API key"
-    },
-    "VITE_SUPABASE_VIDEO_BUCKET": {
-      "description": "Name of your Supabase storage bucket (default: videos)"
+    "DATABASE_URL": {
+      "description": "PostgreSQL connection string for database operations"
     }
   }
 }

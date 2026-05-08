@@ -1,15 +1,14 @@
 # Video Site
 
-A modern, minimalist video feed application built with React, Vite, and Supabase.
+A modern, minimalist video feed application built with React, Vite, and direct PostgreSQL connection.
 
 ## Features
 
 🎬 **Video Feed** - Browse curated video content with beautiful card layouts
-📤 **Video Upload** - Add videos via YouTube embeds or direct MP4 uploads
+📤 **Video Upload** - Add videos via YouTube embeds or direct MP4 URLs
 🎨 **Modern Design** - Glass morphism UI with Tailwind CSS
-🌐 **Cloud Storage** - Supabase integration for scalable storage
+💾 **Direct Database** - PostgreSQL connection for data persistence
 📱 **Responsive** - Works seamlessly on desktop and mobile
-💾 **Hybrid Storage** - Local storage fallback + Supabase cloud sync
 
 ## Quick Start
 
@@ -26,7 +25,7 @@ npm install
 # Create environment file
 cp .env.example .env
 
-# Add your Supabase credentials to .env
+# Add your PostgreSQL connection string to .env
 ```
 
 ### Development
@@ -55,16 +54,14 @@ npm run preview
 Create a `.env` file in the root directory with:
 
 ```
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_anon_key
-VITE_SUPABASE_VIDEO_BUCKET=videos
+DATABASE_URL=postgresql://postgres:password@db.your-project.supabase.co:5432/postgres
 ```
 
-Get these from your Supabase project dashboard.
+This should be your Supabase PostgreSQL connection string.
 
 ### Database Schema
 
-The app expects a `videos` table in Supabase with columns:
+The app expects a `videos` table in PostgreSQL with columns:
 
 ```sql
 - id (uuid)
@@ -76,25 +73,9 @@ The app expects a `videos` table in Supabase with columns:
 - created_at (timestamp)
 ```
 
-Check [supabase-schema.sql](./supabase-schema.sql) for the complete schema.
+## Important Notes
 
-## Project Structure
-
-```
-src/
-├── components/
-│   ├── VideoCard.jsx      # Individual video card component
-│   └── VideoPopup.jsx     # Video player popup
-├── pages/
-│   ├── Home.jsx           # Video feed page
-│   └── Upload.jsx         # Video upload form
-├── App.jsx                # Main app with routing
-├── main.jsx               # React entry point
-├── supabase.js            # Supabase client setup
-└── index.css              # Global styles
-
-public/                    # Static assets
-```
+⚠️ **This setup uses direct PostgreSQL connections which only work in Node.js environments.** For production deployment on Vercel, you may need to use serverless functions for database operations, or switch to Supabase's client library for browser compatibility.
 
 ## Tech Stack
 
@@ -102,7 +83,7 @@ public/                    # Static assets
 - **Vite** - Build tool and dev server
 - **React Router** - Client-side routing
 - **Tailwind CSS** - Utility-first CSS framework
-- **Supabase** - Backend and storage
+- **PostgreSQL** - Direct database connection
 - **PostCSS** - CSS processing
 
 ## Deployment
@@ -113,7 +94,7 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions to Ver
 
 1. Push code to GitHub
 2. Connect repository to Vercel
-3. Set environment variables
+3. Set environment variable: `DATABASE_URL`
 4. Deploy!
 
 ## Browser Support

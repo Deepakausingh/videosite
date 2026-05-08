@@ -6,7 +6,7 @@ Your project is ready for deployment to Vercel! Follow the steps below to get yo
 
 - A Vercel account (create one at https://vercel.com)
 - A GitHub repository (push your code there first)
-- Supabase credentials for the video database
+- PostgreSQL database connection string
 
 ## Step-by-Step Deployment
 
@@ -35,12 +35,12 @@ After selecting your repository, Vercel will ask for configuration:
 4. **Output Directory**: Should auto-detect as `dist`
 5. **Environment Variables**: Add the following:
 
-   - `VITE_SUPABASE_URL`: Your Supabase project URL
-   - `VITE_SUPABASE_ANON_KEY`: Your Supabase public API key
-   - `VITE_SUPABASE_VIDEO_BUCKET`: `videos` (or your custom bucket name)
+   - `DATABASE_URL`: Your PostgreSQL connection string
 
-You can find these values in your `.env` file or in your Supabase project settings at:
-- https://app.supabase.com/project/[your-project-id]/settings/api
+You can find this value in your `.env` file. It should look like:
+```
+postgresql://postgres:password@db.your-project.supabase.co:5432/postgres
+```
 
 ### 4. Deploy
 
@@ -48,6 +48,15 @@ Click the "Deploy" button. Vercel will:
 - Install dependencies
 - Build your project
 - Deploy to production
+
+## Important Notes
+
+⚠️ **Database Connection Limitations**: This setup uses direct PostgreSQL connections which work during the build process but may not work in the browser environment. For full functionality, you may need to:
+
+1. **Use Vercel Serverless Functions** for database operations, or
+2. **Switch back to Supabase Client Library** for browser compatibility
+
+The current setup will work for static deployment but database operations may fail in the browser.
 
 Your site will be live at `https://[your-project-name].vercel.app`
 

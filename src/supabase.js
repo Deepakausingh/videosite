@@ -1,81 +1,106 @@
-import { createClient } from "@supabase/supabase-js";
+import pkg from 'pg';
+const { Pool } = pkg;
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const videoBucket = import.meta.env.VITE_SUPABASE_VIDEO_BUCKET || "videos";
+// Direct PostgreSQL connection using the provided connection string
+const databaseUrl = import.meta.env.DATABASE_URL;
 
-export const hasSupabaseCredentials = Boolean(supabaseUrl && supabaseAnonKey);
+export const hasDatabaseConnection = Boolean(databaseUrl);
 
-export const supabase = hasSupabaseCredentials
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+// PostgreSQL pool for database operations
+let pool = null;
+if (hasDatabaseConnection) {
+  pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false } // Required for Supabase
+  });
+
+  // Handle pool errors
+  pool.on('error', (err) => {
+    console.error('Unexpected error on idle client', err);
+  });
+}
 
 export async function fetchVideosFromSupabase() {
-  if (!supabase) {
+  if (!pool) {
+    console.warn('No database connection available, returning empty array');
     return [];
   }
 
-  const { data, error } = await supabase
-    .from("videos")
-    .select("*")
-    .order("created_at", { ascending: false });
+  try {
+    const client = await pool.connect();
+    const result = await client.query(`
+      SELECT id, title, category, thumbnail, video_url, video_type, created_at
+      FROM videos
+      ORDER BY created_at DESC
+    `);
+    client.release();
 
-  if (error) {
+    return result.rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      category: row.category,
+      thumbnail: row.thumbnail,
+      videoUrl: row.video_url,
+      videoType: row.video_type,
+      created_at: row.created_at
+    }));
+  } catch (error) {
+    console.error('Error fetching videos from database:', error);
     throw error;
   }
-
-  return data ?? [];
 }
 
 export async function insertVideoToSupabase(video) {
-  if (!supabase) {
-    return null;
+  if (!pool) {
+    throw new Error('No database connection available');
   }
 
-  const payload = {
-    id: video.id,
-    title: video.title,
-    category: video.category ?? "General",
-    thumbnail: video.thumbnail || null,
-    video_url: video.videoUrl,
-    video_type: video.videoType
-  };
+  try {
+    const client = await pool.connect();
+    const result = await client.query(`
+      INSERT INTO videos (id, title, category, thumbnail, video_url, video_type, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      RETURNING id, title, category, thumbnail, video_url, video_type, created_at
+    `, [
+      video.id,
+      video.title,
+      video.category ?? "General",
+      video.thumbnail || null,
+      video.videoUrl,
+      video.videoType
+    ]);
+    client.release();
 
-  const { data, error } = await supabase.from("videos").insert(payload).select().single();
-
-  if (error) {
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      title: row.title,
+      category: row.category,
+      thumbnail: row.thumbnail,
+      videoUrl: row.video_url,
+      videoType: row.video_type,
+      created_at: row.created_at
+    };
+  } catch (error) {
+    console.error('Error inserting video to database:', error);
     throw error;
   }
-
-  return data;
 }
 
-export async function uploadVideoFile(file) {
-  if (!supabase) {
-    throw new Error("Supabase is not configured.");
-  }
-
-  const extension = file.name.split(".").pop()?.toLowerCase() || "mp4";
-  const filePath = `uploads/${crypto.randomUUID()}.${extension}`;
-
-  const { error } = await supabase.storage.from(videoBucket).upload(filePath, file, {
-    cacheControl: "3600",
-    upsert: false,
-    contentType: file.type || "video/mp4"
-  });
-
-  if (error) {
-    throw error;
-  }
-
-  const { data } = supabase.storage.from(videoBucket).getPublicUrl(filePath);
-  return data.publicUrl;
-}
+// Note: File upload functionality removed since we're using direct database connection only
+// You'll need to implement file storage separately (e.g., via API or different service)
 
 export function getSupabaseClient() {
-  return supabase;
+  return null; // No Supabase client when using direct connection
 }
 
 export function getVideoBucketName() {
-  return videoBucket;
+  return null; // No bucket when using direct connection
+}
+
+// Cleanup function for graceful shutdown
+export async function closeDatabaseConnection() {
+  if (pool) {
+    await pool.end();
+  }
 }

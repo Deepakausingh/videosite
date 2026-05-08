@@ -1,10 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  getSupabaseClient,
-  getVideoBucketName,
-  hasSupabaseCredentials,
-  insertVideoToSupabase
-} from "../supabase";
+import { insertVideoToSupabase, hasDatabaseConnection } from "../supabase";
 
 const initialForm = {
   title: "",
@@ -16,10 +11,8 @@ const initialForm = {
 
 function Upload() {
   const [form, setForm] = useState(initialForm);
-  const [videoFile, setVideoFile] = useState(null);
   const [message, setMessage] = useState("Fill out the form to add a new video card.");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const preview = useMemo(
     () => ({
       ...form,
@@ -35,125 +28,41 @@ function Upload() {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
-  function handleVideoFileChange(event) {
-    const file = event.target.files?.[0] ?? null;
-    setVideoFile(file);
-    setUploadProgress(0);
-  }
-
-  async function uploadSingleVideoWithProgress(file) {
-    const client = getSupabaseClient();
-    const bucketName = getVideoBucketName();
-
-    if (!client) {
-      throw new Error("Supabase is not configured.");
-    }
-
-    const extension = file.name.split(".").pop()?.toLowerCase() || "mp4";
-    const filePath = `uploads/${crypto.randomUUID()}.${extension}`;
-
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open(
-        "POST",
-        `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/${bucketName}/${filePath}`
-      );
-      xhr.setRequestHeader("apikey", import.meta.env.VITE_SUPABASE_ANON_KEY);
-      xhr.setRequestHeader("Authorization", `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`);
-      xhr.setRequestHeader("x-upsert", "false");
-      xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
-
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) {
-          return;
-        }
-
-        const percent = Math.round((event.loaded / event.total) * 100);
-        setUploadProgress(percent);
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          setUploadProgress(100);
-          resolve();
-          return;
-        }
-
-        reject(new Error(xhr.responseText || "Upload failed"));
-      };
-
-      xhr.onerror = () => reject(new Error("Network error while uploading video."));
-      xhr.send(file);
-    });
-
-    const { data } = client.storage.from(bucketName).getPublicUrl(filePath);
-    return data.publicUrl;
-  }
-
   async function handleSubmit(event) {
     event.preventDefault();
 
-    let resolvedVideoUrl = form.videoUrl;
-
-    if (form.videoType === "mp4-upload") {
-      if (!videoFile) {
-        setMessage("Please choose an MP4 file before saving.");
-        return;
-      }
-
-      if (!videoFile.type.includes("mp4")) {
-        setMessage("Only .mp4 video files are supported right now.");
-        return;
-      }
-
-      if (!hasSupabaseCredentials) {
-        setMessage("Add Supabase keys first to upload MP4 files into storage.");
-        return;
-      }
-
-      try {
-        setIsUploading(true);
-        setMessage("Uploading one video file...");
-        resolvedVideoUrl = await uploadSingleVideoWithProgress(videoFile);
-      } catch (error) {
-        setMessage("MP4 upload failed. Check your Supabase bucket settings and try again.");
-        setIsUploading(false);
-        return;
-      }
-    }
-
-    if (!resolvedVideoUrl) {
-      setMessage("Add a video URL or upload an MP4 file.");
+    if (!hasDatabaseConnection) {
+      setMessage("Database connection not available. Check your DATABASE_URL.");
       return;
     }
 
-    const nextVideo = {
-      ...form,
-      id: crypto.randomUUID(),
-      category: form.category || "General",
-      videoUrl: resolvedVideoUrl,
-      videoType: form.videoType === "embed" ? "embed" : "mp4"
-    };
-
-    const storedVideos = JSON.parse(localStorage.getItem("video-site-videos") || "[]");
-    localStorage.setItem("video-site-videos", JSON.stringify([nextVideo, ...storedVideos]));
-
-    if (hasSupabaseCredentials) {
-      try {
-        await insertVideoToSupabase(nextVideo);
-        setMessage("Video saved to local storage and Supabase.");
-      } catch (error) {
-        const reason = error?.message || "Unknown Supabase error.";
-        setMessage(`Saved locally, but Supabase insert failed: ${reason}`);
-      }
-    } else {
-      setMessage("Video saved locally. Add Supabase keys in .env if you want cloud storage too.");
+    if (!form.videoUrl) {
+      setMessage("Please provide a video URL.");
+      return;
     }
 
-    setForm(initialForm);
-    setVideoFile(null);
-    setUploadProgress(0);
-    setIsUploading(false);
+    try {
+      setIsSubmitting(true);
+      setMessage("Saving video...");
+
+      const nextVideo = {
+        ...form,
+        id: crypto.randomUUID(),
+        category: form.category || "General",
+        videoUrl: form.videoUrl,
+        videoType: form.videoType === "embed" ? "embed" : "mp4"
+      };
+
+      await insertVideoToSupabase(nextVideo);
+
+      setMessage("Video saved successfully!");
+      setForm(initialForm);
+    } catch (error) {
+      const reason = error?.message || "Unknown error.";
+      setMessage(`Failed to save video: ${reason}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -167,9 +76,8 @@ function Upload() {
         <label>
           Video Type
           <select name="videoType" value={form.videoType} onChange={handleChange}>
-            <option value="embed">Embed URL</option>
+            <option value="embed">Embed URL (YouTube, Vimeo, etc.)</option>
             <option value="mp4">Direct MP4 URL</option>
-            <option value="mp4-upload">Upload MP4 File</option>
           </select>
         </label>
 
@@ -188,42 +96,23 @@ function Upload() {
           <input name="thumbnail" value={form.thumbnail} onChange={handleChange} />
         </label>
 
-        {form.videoType !== "mp4-upload" ? (
-          <label>
-            {form.videoType === "embed" ? "Video Embed URL" : "Direct MP4 URL"}
-            <input
-              name="videoUrl"
-              value={form.videoUrl}
-              onChange={handleChange}
-              placeholder={
-                form.videoType === "embed"
-                  ? "https://www.youtube.com/embed/..."
-                  : "https://example.com/video.mp4"
-              }
-              required
-            />
-          </label>
-        ) : (
-          <label>
-            MP4 File
-            <input type="file" accept="video/mp4" onChange={handleVideoFileChange} required />
-          </label>
-        )}
+        <label>
+          {form.videoType === "embed" ? "Video Embed URL" : "Direct MP4 URL"}
+          <input
+            name="videoUrl"
+            value={form.videoUrl}
+            onChange={handleChange}
+            placeholder={
+              form.videoType === "embed"
+                ? "https://www.youtube.com/embed/..."
+                : "https://example.com/video.mp4"
+            }
+            required
+          />
+        </label>
 
-        {form.videoType === "mp4-upload" ? (
-          <div className="progress-panel">
-            <div className="progress-copy">
-              <span>Upload Progress</span>
-              <strong>{uploadProgress}%</strong>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
-            </div>
-          </div>
-        ) : null}
-
-        <button type="submit" className="primary-btn">
-          {isUploading ? "Uploading..." : "Save Video"}
+        <button type="submit" className="primary-btn" disabled={isSubmitting}>
+          {isSubmitting ? "Saving..." : "Save Video"}
         </button>
 
         <p className="helper-text">{message}</p>
